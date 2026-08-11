@@ -1,0 +1,69 @@
+# ==========================================================
+# Incus Preseed Configuration
+# Optimized for WPHPanel — self-hosted managed hosting
+# IPv4 /16 + DHCP + ZFS (with Dir fallback)
+# ==========================================================
+
+config:
+  core.https_address: "[::]:8443"
+
+networks:
+  - name: wphpanel-net
+    type: bridge
+    project: default
+    description: "WPHPanel Private Bridge Network"
+    config:
+      ipv4.address: 10.100.0.1/16
+      ipv4.nat: "true"
+      ipv4.dhcp: "true"
+      ipv4.dhcp.ranges: 10.100.0.2-10.100.255.254
+      ipv6.address: none
+      dns.domain: containers.local
+      dns.mode: managed
+
+storage_pools:
+  - name: default
+    driver: zfs
+    description: "WPHPanel ZFS Storage Pool"
+    config:
+      size: __ZFS_POOL_SIZE__
+      source: /var/lib/incus/disks/default.img
+      zfs.pool_name: wphpanel
+      volume.zfs.use_refquota: "true"
+
+profiles:
+  - name: default
+    description: "Default Secure Container Profile"
+    project: default
+    config:
+      security.nesting: "false"
+      security.privileged: "false"
+      limits.cpu: "1"
+      limits.memory: 228MB
+      boot.autostart: "true"
+    devices:
+      eth0:
+        name: eth0
+        type: nic
+        network: wphpanel-net
+        security.port_isolation: "true"
+      root:
+        type: disk
+        pool: default
+        path: /
+        size: 10GB
+
+projects:
+  - name: default
+    description: "Default Incus Project"
+    config:
+      features.images: "true"
+      features.networks: "true"
+      features.networks.zones: "true"
+      features.profiles: "true"
+      features.storage.buckets: "true"
+      features.storage.volumes: "true"
+
+storage_volumes: []
+certificates: []
+cluster_groups: []
