@@ -74,6 +74,12 @@ func runProvision(cfg InstallConfig, creds Credentials, ch chan StepUpdate) {
 		send(1, "System Update", "error", "WPHPanel requires Ubuntu Linux (supported: Ubuntu 22.04, 24.04, 26.04 LTS)")
 		return
 	}
+
+	// Fresh Server Verification: ensure system is clean to prevent package & config collisions
+	if _, err := os.Stat("/opt/wphpanel/bin/wphpanel-api"); err == nil {
+		send(1, "System Update", "error", "WPHPanel is already installed. WPHPanel requires a clean, fresh Ubuntu server.")
+		return
+	}
 	aptWait()
 	run("apt-get", "update", "-y", "-qq")
 	run("apt-get", "upgrade", "-y", "-qq")
@@ -432,26 +438,14 @@ func installZFSAndIncus() {
 		poolSize = 2
 	}
 
-	// Write preseed with dynamic size
+	// Write preseed with ZFS storage pool ONLY (Strict ZFS — enterprise production performance)
 	preseedRaw, _ := embeddedFS.ReadFile("embedded/preseed.yaml")
 	preseedStr := string(preseedRaw)
-
-	// Check if ZFS is supported by host kernel; if not, fallback to 'dir' driver gracefully
-	zfsStatus := shellOutput("zpool list 2>&1 || true")
-	if strings.Contains(zfsStatus, "no pools available") || strings.Contains(zfsStatus, "zfs") {
-		preseedStr = strings.ReplaceAll(preseedStr, "__ZFS_POOL_SIZE__", fmt.Sprintf("%dGiB", poolSize))
-	} else {
-		// Fallback to dir storage pool
-		preseedStr = strings.ReplaceAll(preseedStr, "driver: zfs", "driver: dir")
-		preseedStr = strings.ReplaceAll(preseedStr, "size: __ZFS_POOL_SIZE__", "")
-		preseedStr = strings.ReplaceAll(preseedStr, "source: /var/lib/incus/disks/default.img", "")
-		preseedStr = strings.ReplaceAll(preseedStr, "zfs.pool_name: wphpanel", "")
-		preseedStr = strings.ReplaceAll(preseedStr, "volume.zfs.use_refquota: \"true\"", "")
-	}
+	preseedStr = strings.ReplaceAll(preseedStr, "__ZFS_POOL_SIZE__", fmt.Sprintf("%dGiB", poolSize))
 
 	tmpFile := "/tmp/wphpanel-preseed.yaml"
 	os.WriteFile(tmpFile, []byte(preseedStr), 0600)
-	run("bash", "-c", "cat "+tmpFile+" | incus admin init --preseed 2>/dev/null || true")
+	run("bash", "-c", "cat "+tmpFile+" | incus admin init --preseed")
 	os.Remove(tmpFile)
 
 	run("systemctl", "enable", "--now", "incus")

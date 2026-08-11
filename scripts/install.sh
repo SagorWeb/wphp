@@ -28,6 +28,14 @@ else
   exit 1
 fi
 
+# Fresh Server Verification
+if [ -f /opt/wphpanel/bin/wphpanel-api ] || [ -f /etc/systemd/system/wphpanel-api.service ]; then
+  echo "❌ Error: WPHPanel is already installed on this server."
+  echo "WPHPanel requires a clean, fresh Ubuntu server (supported: 22.04, 24.04, 26.04 LTS)."
+  echo "Running on a pre-configured server causes port and service collisions."
+  exit 1
+fi
+
 echo "════════════════════════════════════════════════════════════════"
 echo "        🚀 WPHPanel — Server Bootstrap Installer"
 echo "════════════════════════════════════════════════════════════════"
