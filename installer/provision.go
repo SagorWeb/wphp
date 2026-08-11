@@ -407,8 +407,8 @@ func installZFSAndIncus() {
 	os.WriteFile("/etc/modprobe.d/zfs.conf",
 		[]byte(fmt.Sprintf("options zfs zfs_arc_max=%d\n", arcMax)), 0644)
 
-	// Idempotency: skip preseed if Incus is already initialized
-	if shellOutput("incus info 2>/dev/null | grep -c 'driver:' || true") != "0" {
+	// Idempotency: skip preseed if default storage pool already exists
+	if strings.TrimSpace(shellOutput("incus storage list --format csv 2>/dev/null | grep -c '^default,' || echo 0")) != "0" {
 		run("systemctl", "enable", "--now", "incus")
 		run("systemctl", "enable", "--now", "incus.socket")
 		return
