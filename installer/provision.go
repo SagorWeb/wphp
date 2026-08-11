@@ -330,11 +330,11 @@ func installPostgreSQL(creds Credentials) {
 	if parallelMaint < 2 { parallelMaint = 2 }
 	if parallelMaint > 4 { parallelMaint = 4 }
 
-	// Create user + database with permissions to create other roles and databases (required to manage user databases)
+	// Create/Update user + database with permissions to create other roles and databases
 	run("sudo", "-u", "postgres", "psql", "-c",
-		fmt.Sprintf("CREATE USER wphpanel WITH PASSWORD '%s' NOSUPERUSER CREATEROLE CREATEDB;", creds.PostgresPass))
+		fmt.Sprintf("CREATE USER wphpanel WITH PASSWORD '%s' NOSUPERUSER CREATEROLE CREATEDB; ALTER USER wphpanel WITH PASSWORD '%s' NOSUPERUSER CREATEROLE CREATEDB;", creds.PostgresPass, creds.PostgresPass))
 	run("sudo", "-u", "postgres", "psql", "-c",
-		"CREATE DATABASE wphpanel OWNER wphpanel;")
+		"CREATE DATABASE wphpanel OWNER wphpanel; ALTER DATABASE wphpanel OWNER TO wphpanel;")
 
 	tuningSQL := fmt.Sprintf(`
 ALTER SYSTEM SET shared_buffers = '%dMB';
