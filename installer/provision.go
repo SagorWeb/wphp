@@ -336,11 +336,20 @@ func installPostgreSQL(creds Credentials) {
 	if parallelMaint < 2 { parallelMaint = 2 }
 	if parallelMaint > 4 { parallelMaint = 4 }
 
-	// Create/Update user + database with permissions to create other roles and databases
-	run("sudo", "-u", "postgres", "psql", "-c",
-		fmt.Sprintf("CREATE USER wphpanel WITH PASSWORD '%s' NOSUPERUSER CREATEROLE CREATEDB; ALTER USER wphpanel WITH PASSWORD '%s' NOSUPERUSER CREATEROLE CREATEDB;", creds.PostgresPass, creds.PostgresPass))
-	run("sudo", "-u", "postgres", "psql", "-c",
-		"CREATE DATABASE wphpanel OWNER wphpanel; ALTER DATABASE wphpanel OWNER TO wphpanel;")
+	// 1. Create or update wphpanel role (DO $$ block ensures clean execution)
+	userSQL := fmt.Sprintf(`DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'wphpanel') THEN
+        CREATE USER wphpanel WITH PASSWORD '%s' NOSUPERUSER CREATEROLE CREATEDB;
+    ELSE
+        ALTER USER wphpanel WITH PASSWORD '%s' NOSUPERUSER CREATEROLE CREATEDB;
+    END IF;
+END $$;`, creds.PostgresPass, creds.PostgresPass)
+	run("sudo", "-u", "postgres", "psql", "-c", userSQL)
+
+	// 2. Create database (standalone statement)
+	run("bash", "-c", "sudo -u postgres psql -lqt | cut -d \\| -f 1 | grep -qw wphpanel || sudo -u postgres psql -c 'CREATE DATABASE wphpanel OWNER wphpanel;'")
+	run("sudo", "-u", "postgres", "psql", "-c", "GRANT ALL PRIVILEGES ON DATABASE wphpanel TO wphpanel;")
 
 	tuningSQL := fmt.Sprintf(`
 ALTER SYSTEM SET shared_buffers = '%dMB';

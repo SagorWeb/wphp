@@ -12,7 +12,7 @@
     },
     "installer_linux_amd64": {
       "url": "https://raw.githubusercontent.com/SagorWeb/wphp/main/build/wphpanel-installer-linux-amd64.tar.gz",
-      "sha256": "38bd5afad3c62bfd4a1219c29aff3801c3af6f03077146d97beaa699e1cca44e"
+      "sha256": "62ba989f1806f4783a7a2898b79c43cfccde9616195275db29be53c634113a1f"
     }
   }
 }
