@@ -86,14 +86,13 @@ body{min-height:100vh;display:flex;align-items:center;justify-content:center;bac
 <div id="completeView" class="card hidden">
 <div class="success">
 <h2>&#10003; Installation Complete</h2>
-<p>Your server is provisioned! Upload backend &amp; frontend to finish setup.</p>
+<p>Your server is 100% provisioned and WPHPanel is active!</p>
 </div>
 <div class="creds" id="creds"></div>
 <div style="margin-top:16px;padding:14px;background:rgba(99,102,241,.06);border-radius:10px;font-size:12px;color:var(--dim);line-height:1.6">
-<strong style="color:var(--text)">Next Steps:</strong><br>
-1. Upload backend → <code style="color:var(--accent2)">/opt/wphpanel/bin/wphpanel-api</code><br>
-2. Upload frontend → <code style="color:var(--accent2)">/var/www/wphpanel/</code><br>
-3. Run: <code style="color:var(--accent2)">systemctl start wphpanel-api</code>
+<strong style="color:var(--text)">Access Your Panel:</strong><br>
+Open your web browser and navigate to: <code style="color:var(--accent2)">https://<span id="panelHost"></span></code><br>
+Log in with Admin Email and Admin Password specified during setup.
 </div>
 <button class="btn btn-danger" id="deleteBtn" onclick="deleteInstaller()">Delete Installer from Server</button>
 </div>
@@ -220,10 +219,11 @@ function showComplete(d){
   html+=cr('PostgreSQL Pass',c.postgres_pass);
   html+=cr('Valkey Pass',c.valkey_pass);
   html+=cr('JWT Secret',c.jwt_secret);
-  html+=cr('API Binary','/opt/wphpanel/bin/wphpanel-api');
-  html+=cr('Frontend','/var/www/wphpanel/');
+  html+=cr('Panel Binary','/opt/wphpanel/bin/wphpanel-api');
   html+=cr('.env Config','/opt/wphpanel/.env');
   document.getElementById('creds').innerHTML=html;
+  const hostEl = document.getElementById('panelHost');
+  if (hostEl) hostEl.textContent = d.hostname || window.location.hostname;
 
   // Auto delete installer from server for security
   setTimeout(() => {
