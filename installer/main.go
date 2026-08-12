@@ -170,10 +170,11 @@ func handleInstall(w http.ResponseWriter, r *http.Request) {
 		os.WriteFile("/opt/wphpanel/.install_state.json", stateData, 0600)
 
 		runProvision(cfg, creds, progressChan)
-		
+
 		// Consume any remaining channel updates safely
-		for range progressChan {}
-		
+		for range progressChan {
+		}
+
 		installMu.Lock()
 		installing = false
 		installMu.Unlock()

@@ -50,7 +50,10 @@ echo ">>> Installing prerequisite packages..."
 apt-get update -qq >/dev/null 2>&1 || true
 apt-get install -y -qq curl tar ca-certificates ufw >/dev/null 2>&1 || true
 
-# 4. Open Installer Firewall Port (8090)
+# 4. Open Installer Firewall Port (8090) + web ports early (ACME/HTTPS)
+ufw allow 22/tcp >/dev/null 2>&1 || true
+ufw allow 80/tcp >/dev/null 2>&1 || true
+ufw allow 443/tcp >/dev/null 2>&1 || true
 ufw allow 8090/tcp >/dev/null 2>&1 || true
 
 # 5. Detect Server Public IP Address
