@@ -113,15 +113,19 @@ ensure_supported_server() {
       ;;
   esac
 
-  if [ ! -f /etc/os-release ]; then
-    fail "/etc/os-release not found. Supported OS: Ubuntu 22.04 / 24.04 / 26.04 LTS."
+	if [ ! -f /etc/os-release ]; then
+    fail "/etc/os-release not found. WPHPanel only installs on Ubuntu 22.04, 24.04, or 26.04 LTS."
   fi
   # shellcheck source=/dev/null
   . /etc/os-release
-  [ "${ID:-}" = "ubuntu" ] || fail "Unsupported OS (${PRETTY_NAME:-$ID}). Only Ubuntu LTS is supported."
+  if [ "${ID:-}" != "ubuntu" ]; then
+    fail "This OS is ${PRETTY_NAME:-${ID:-unknown}}. WPHPanel only installs on Ubuntu 22.04, 24.04, or 26.04 LTS — not Debian, Mint, or other distros."
+  fi
   case "${VERSION_ID:-}" in
     22.04|24.04|26.04) ;;
-    *) fail "Unsupported Ubuntu ${VERSION_ID:-unknown} (${PRETTY_NAME:-}). Supported: 22.04, 24.04, 26.04 LTS." ;;
+    *)
+      fail "This is Ubuntu ${VERSION_ID:-unknown} (${PRETTY_NAME:-}). WPHPanel only installs on Ubuntu 22.04, 24.04, or 26.04 LTS."
+      ;;
   esac
 
   local ns
