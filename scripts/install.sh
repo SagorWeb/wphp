@@ -2,10 +2,10 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # WPHPanel — Server Bootstrap
 # ═══════════════════════════════════════════════════════════════════════════════
-# Works on any cloud login name (root, ubuntu, debian, admin, …).
-# Privilege is UID 0 (real root), not the username.
+# One command on any cloud (OVH, AWS, GCP, Azure, Hetzner, DigitalOcean, …).
+# Login name can be root, ubuntu, debian, admin, etc. Privilege is UID 0.
 #
-#   curl -fsSL https://raw.githubusercontent.com/SagorWeb/wphp/main/scripts/install.sh | bash
+#   sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/SagorWeb/wphp/main/scripts/install.sh | bash'
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -13,8 +13,22 @@ set -euo pipefail
 REPO_RAW="https://raw.githubusercontent.com/SagorWeb/wphp/main"
 SCRIPT_URL="${REPO_RAW}/scripts/install.sh"
 INSTALLER_PORT="8090"
+UNIVERSAL_CMD="sudo bash -c 'curl -fsSL ${SCRIPT_URL} | bash'"
 
-# Real root = kernel UID 0. Login name (ubuntu@ on OVH, debian@, etc.) does not matter.
+fail() {
+  echo ""
+  echo "WPHPanel cannot install on this server."
+  echo "  $1"
+  echo ""
+  echo "Required: fresh Ubuntu 22.04 / 24.04 / 26.04 LTS, x86_64, a real KVM/dedicated"
+  echo "host (not OpenVZ, not WSL, not already inside a container), systemd,"
+  echo "at least 2 GB RAM and 20 GB disk, and real root (UID 0)."
+  echo ""
+  echo "Install command:"
+  echo "  ${UNIVERSAL_CMD}"
+  exit 1
+}
+
 is_root() {
   [ "$(id -u)" -eq 0 ]
 }
@@ -28,99 +42,146 @@ ensure_root() {
   login_name="$(id -un 2>/dev/null || echo unknown)"
   uid="$(id -u)"
 
-  echo "This session is '${login_name}' (UID ${uid})."
-  echo "WPHPanel needs real root (UID 0). The account name does not matter."
+  echo "Logged in as '${login_name}' (UID ${uid})."
+  echo "Need real root (UID 0). Account name does not matter."
   echo ""
 
   if [ "${WPHPANEL_INSTALL_ESCALATED:-}" = "1" ]; then
-    echo "Error: sudo ran, but this process is still not root (UID ${uid})."
-    echo "This server cannot grant root. Stopped."
-    exit 1
+    fail "sudo ran, but this process is still UID ${uid}. This account cannot become root."
   fi
 
   if ! command -v sudo >/dev/null 2>&1; then
-    echo "Error: sudo is not installed, and this account is not root."
-    echo "Log in as a root-capable user, then run:"
-    echo "  curl -fsSL ${SCRIPT_URL} | sudo bash"
-    exit 1
+    fail "sudo is not installed. Log in as root, or install sudo, then run: ${UNIVERSAL_CMD}"
   fi
 
-  # Passwordless sudo (OVH / AWS / GCP / Azure Ubuntu images)
   if sudo -n true 2>/dev/null; then
     echo ">>> Re-running as root via sudo..."
     export WPHPANEL_INSTALL_ESCALATED=1
     exec sudo -E bash -c "curl -fsSL '${SCRIPT_URL}' | bash"
   fi
 
-  # sudo exists but needs a password — curl|bash cannot prompt reliably
-  echo "This account can use sudo, but a password is required."
-  echo "Run this and enter your password when asked:"
-  echo "  curl -fsSL ${SCRIPT_URL} | sudo bash"
+  echo "This account can use sudo. Run this one command (enter your password if asked):"
+  echo ""
+  echo "  ${UNIVERSAL_CMD}"
+  echo ""
   exit 1
 }
 
+# Isolated system containers need a real host kernel (namespaces, cgroup, ZFS).
 ensure_supported_server() {
-  if [ "$(uname -s)" != "Linux" ]; then
-    echo "Error: unsupported system ($(uname -s)). WPHPanel only installs on Linux."
-    exit 1
-  fi
+  [ "$(uname -s)" = "Linux" ] || fail "Not Linux ($(uname -s))."
 
   local arch
   arch="$(uname -m)"
   case "$arch" in
     x86_64|amd64) ;;
-    *)
-      echo "Error: unsupported CPU (${arch}). WPHPanel requires x86_64 (amd64)."
-      exit 1
-      ;;
+    *) fail "Unsupported CPU (${arch}). Need x86_64 (amd64)." ;;
   esac
 
-  if [ ! -d /run/systemd/system ]; then
-    echo "Error: systemd is not running. WPHPanel needs a normal Ubuntu VPS, not a container without systemd."
-    exit 1
+  if [ ! -d /run/systemd/system ] || [ "$(ps -p 1 -o comm= 2>/dev/null || true)" != "systemd" ]; then
+    fail "systemd is not PID 1. Need a normal Ubuntu VPS, not a container without systemd."
   fi
+
+  if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ] || grep -qi microsoft /proc/version 2>/dev/null; then
+    fail "WSL is not supported. Use a cloud VPS or dedicated server."
+  fi
+
+  # OpenVZ / Virtuozzo cannot run isolated system containers.
+  if [ -d /proc/vz ] || [ -f /proc/user_beancounters ]; then
+    fail "This VPS type (OpenVZ/Virtuozzo) cannot run isolated system containers. Use KVM or dedicated hardware."
+  fi
+
+  local virt virt_container
+  virt=""
+  virt_container=""
+  if command -v systemd-detect-virt >/dev/null 2>&1; then
+    virt="$(systemd-detect-virt 2>/dev/null || true)"
+    virt_container="$(systemd-detect-virt --container 2>/dev/null || true)"
+  fi
+  case "${virt_container}" in
+    none|"") ;;
+    wsl)
+      fail "WSL is not supported. Use a cloud VPS or dedicated server."
+      ;;
+    openvz|lxc|lxc-libvirt|docker|podman|container-other|systemd-nspawn|proxmox)
+      fail "This machine is already a container (${virt_container}). WPHPanel must be installed on the host VM or dedicated server."
+      ;;
+  esac
+  case "${virt}" in
+    openvz)
+      fail "This VPS type cannot run isolated system containers. Use KVM or dedicated hardware."
+      ;;
+  esac
 
   if [ ! -f /etc/os-release ]; then
-    echo "Error: /etc/os-release not found. Supported OS: Ubuntu 22.04 / 24.04 / 26.04 LTS."
-    exit 1
+    fail "/etc/os-release not found. Supported OS: Ubuntu 22.04 / 24.04 / 26.04 LTS."
   fi
-
   # shellcheck source=/dev/null
   . /etc/os-release
-
-  if [ "${ID:-}" != "ubuntu" ]; then
-    echo "Error: unsupported OS (${PRETTY_NAME:-$ID})."
-    echo "WPHPanel only supports Ubuntu 22.04, 24.04, and 26.04 LTS."
-    exit 1
-  fi
-
+  [ "${ID:-}" = "ubuntu" ] || fail "Unsupported OS (${PRETTY_NAME:-$ID}). Only Ubuntu LTS is supported."
   case "${VERSION_ID:-}" in
     22.04|24.04|26.04) ;;
-    *)
-      echo "Error: unsupported Ubuntu ${VERSION_ID:-unknown} (${PRETTY_NAME:-})."
-      echo "Supported: Ubuntu 22.04, 24.04, 26.04 LTS."
-      exit 1
-      ;;
+    *) fail "Unsupported Ubuntu ${VERSION_ID:-unknown} (${PRETTY_NAME:-}). Supported: 22.04, 24.04, 26.04 LTS." ;;
   esac
+
+  local ns
+  for ns in user mnt pid net ipc uts; do
+    [ -e "/proc/1/ns/${ns}" ] || fail "Kernel is missing the ${ns} namespace. Isolated containers cannot run here."
+  done
+
+  if [ ! -f /sys/fs/cgroup/cgroup.controllers ] && [ ! -d /sys/fs/cgroup/memory ]; then
+    fail "cgroup is not available. Isolated containers cannot run here."
+  fi
+
+  # Storage driver (ZFS) must be loadable — Ubuntu kernels include it; custom/OpenVZ kernels often do not.
+  local krel zfs_ko
+  krel="$(uname -r)"
+  zfs_ko="$(find "/lib/modules/${krel}" -name 'zfs.ko*' 2>/dev/null | head -1 || true)"
+  if [ -d /sys/module/zfs ]; then
+    :
+  elif modprobe zfs >/dev/null 2>&1; then
+    :
+  elif [ -n "${zfs_ko}" ]; then
+    :
+  else
+    fail "This kernel cannot load the required storage module (ZFS). Use a standard Ubuntu cloud/dedicated image, not a custom or OpenVZ kernel."
+  fi
+
+  local ram_mb disk_gb
+  ram_mb="$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+  disk_gb="$(df -B1G --output=size / 2>/dev/null | tail -1 | tr -d ' ' || echo 0)"
+  [ "${ram_mb}" -ge 2048 ] || fail "Not enough RAM (${ram_mb} MB). Need at least 2 GB (4 GB recommended)."
+  [ "${disk_gb}" -ge 20 ] || fail "Not enough disk (${disk_gb} GB). Need at least 20 GB on /."
+
+  # Running foreign container platforms will fight the panel. Idle Ubuntu lxd snap is OK.
+  if systemctl is-active --quiet docker 2>/dev/null || systemctl is-active --quiet docker.socket 2>/dev/null; then
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+      fail "Docker is running. WPHPanel needs a clean host. Use a fresh Ubuntu server."
+    fi
+  fi
+  if systemctl is-active --quiet incus 2>/dev/null || systemctl is-active --quiet lxd 2>/dev/null; then
+    fail "Another container platform is already running. WPHPanel needs a clean host."
+  fi
 }
 
 ensure_root
 ensure_supported_server
 
 if [ -f /opt/wphpanel/bin/wphpanel-api ] || [ -f /etc/systemd/system/wphpanel-api.service ]; then
-  echo "Error: WPHPanel is already installed on this server."
-  echo "WPHPanel requires a clean, fresh Ubuntu server (22.04 / 24.04 / 26.04 LTS)."
-  exit 1
+  fail "WPHPanel is already installed. Use a clean Ubuntu server."
 fi
 
 echo "════════════════════════════════════════════════════════════════"
 echo "        WPHPanel — Server Bootstrap"
 echo "════════════════════════════════════════════════════════════════"
-echo "  User      : $(id -un) (UID $(id -u), root privileges)"
+echo "  User      : $(id -un) (UID $(id -u), root)"
 echo "  Target OS : ${PRETTY_NAME}"
 echo "  CPU       : $(uname -m)"
+echo "  RAM       : $(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo) MB"
 echo "  Date      : $(date -u)"
 echo "════════════════════════════════════════════════════════════════"
+echo ""
+echo "Server checks passed. Isolated containers can run on this host."
 echo ""
 
 export DEBIAN_FRONTEND=noninteractive
