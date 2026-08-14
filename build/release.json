@@ -1,18 +1,18 @@
 {
   "version": "v1.0.0",
-  "build_number": 10009,
-  "released_at": "2026-08-14T07:00:00Z",
+  "build_number": 10010,
+  "released_at": "2026-08-14T07:20:00Z",
   "min_panel_version": "v1.0.0",
   "changelog": "https://github.com/SagorWeb/wphp/releases/tag/v1.0.0",
   "mandatory": false,
   "download": {
     "linux_amd64": {
       "url": "https://raw.githubusercontent.com/SagorWeb/wphp/main/build/wphpanel-linux-amd64.tar.gz",
-      "sha256": "b9705cd8c040740cf4e881d7be58fe19da42ec3d3fe5b2445e9a46181ccd733d"
+      "sha256": "3e82d6469588eb9d45e74092f32eebe28b5d4cd7198b3c2323f1075d7b867e27"
     },
     "installer_linux_amd64": {
       "url": "https://raw.githubusercontent.com/SagorWeb/wphp/main/build/wphpanel-installer-linux-amd64.tar.gz",
-      "sha256": "aa1228add2df714223188c4fe2e8dea21f878d87c814a3f90dceee4891bee6d8"
+      "sha256": "709e59fd5c2d5f4473e2c0edb47a86bbf5ee5ae2f38889f87d3ca7dbbae60277"
     }
   }
 }
