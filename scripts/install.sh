@@ -225,7 +225,13 @@ if curl -fsSL "$MANIFEST_URL" -o "$WORKDIR/release.json" 2>/dev/null; then
 fi
 
 tar -xzf "$WORKDIR/installer.tar.gz" -C "$WORKDIR"
-cp "$WORKDIR/wphpanel-installer-linux-amd64" /tmp/wphpanel-installer
+if [ -f "$WORKDIR/wphpanel-installer-linux-amd64" ]; then
+  cp "$WORKDIR/wphpanel-installer-linux-amd64" /tmp/wphpanel-installer
+elif [ -f "$WORKDIR/wphpanel-installer" ]; then
+  cp "$WORKDIR/wphpanel-installer" /tmp/wphpanel-installer
+else
+  find "$WORKDIR" -maxdepth 2 -type f -perm -111 -exec cp {} /tmp/wphpanel-installer \;
+fi
 chmod +x /tmp/wphpanel-installer
 rm -rf "$WORKDIR"
 
