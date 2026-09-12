@@ -154,7 +154,7 @@ ensure_supported_server() {
   local ram_mb disk_gb
   ram_mb="$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
   disk_gb="$(df -B1G --output=size / 2>/dev/null | tail -1 | tr -d ' ' || echo 0)"
-  [ "${ram_mb}" -ge 2048 ] || fail "Not enough RAM (${ram_mb} MB). Need at least 2 GB (4 GB recommended)."
+  [ "${ram_mb}" -ge 1500 ] || fail "Not enough RAM (${ram_mb} MB). Need at least 2 GB (4 GB recommended)."
   [ "${disk_gb}" -ge 20 ] || fail "Not enough disk (${disk_gb} GB). Need at least 20 GB on /."
 
   # Running foreign container platforms will fight the panel. Idle Ubuntu lxd snap is OK.
