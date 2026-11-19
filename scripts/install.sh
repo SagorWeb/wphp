@@ -206,37 +206,50 @@ fi
 INSTALLER_URL="${WPHPANEL_INSTALLER_URL:-${REPO_RAW}/build/wphpanel-installer-linux-amd64.tar.gz}"
 MANIFEST_URL="${WPHPANEL_MANIFEST_URL:-${REPO_RAW}/build/release.json}"
 
-WORKDIR=/tmp/wphpanel-install-tmp
-rm -rf "$WORKDIR"
-mkdir -p "$WORKDIR"
+WORKDIR="$(mktemp -d /tmp/wphpanel-install.XXXXXX)"
+chmod 700 "$WORKDIR"
+trap 'rm -rf "$WORKDIR"' EXIT
 
 echo ">>> Fetching WPHPanel web installer..."
 curl -fsSL "$INSTALLER_URL" -o "$WORKDIR/installer.tar.gz"
 
-if curl -fsSL "$MANIFEST_URL" -o "$WORKDIR/release.json" 2>/dev/null; then
-  EXPECTED=$(sed -n '/installer_linux_amd64/,/sha256/s/.*"sha256": *"\([^"]*\)".*/\1/p' "$WORKDIR/release.json" | head -1)
-  GOT=$(sha256sum "$WORKDIR/installer.tar.gz" | awk '{print $1}')
-  if [ -n "$EXPECTED" ] && [ "$EXPECTED" != "$GOT" ]; then
-    echo "Error: installer checksum mismatch."
-    echo "  expected: $EXPECTED"
-    echo "  got:      $GOT"
-    exit 1
+EXPECTED="${WPHPANEL_INSTALLER_SHA256:-}"
+if [ -z "$EXPECTED" ]; then
+  if ! curl -fsSL "$MANIFEST_URL" -o "$WORKDIR/release.json"; then
+    fail "Could not fetch release manifest from ${MANIFEST_URL} to verify installer integrity."
   fi
+  EXPECTED=$(sed -n '/installer_linux_amd64/,/sha256/s/.*"sha256": *"\([^"]*\)".*/\1/p' "$WORKDIR/release.json" | head -1 | tr '[:upper:]' '[:lower:]')
+fi
+EXPECTED=$(printf '%s' "$EXPECTED" | tr '[:upper:]' '[:lower:]')
+if ! printf '%s' "$EXPECTED" | grep -Eq '^[0-9a-f]{64}$'; then
+  fail "Release manifest did not provide a valid SHA-256 digest for installer_linux_amd64."
+fi
+GOT=$(sha256sum "$WORKDIR/installer.tar.gz" | awk '{print tolower($1)}')
+if [ "$EXPECTED" != "$GOT" ]; then
+  echo "Error: installer checksum mismatch."
+  echo "  expected: $EXPECTED"
+  echo "  got:      $GOT"
+  exit 1
 fi
 
-tar -xzf "$WORKDIR/installer.tar.gz" -C "$WORKDIR"
+tar --no-same-owner -xzf "$WORKDIR/installer.tar.gz" -C "$WORKDIR"
+INSTALL_DIR="/root/.wphpanel-installer"
+rm -rf "$INSTALL_DIR"
+mkdir -p -m 700 "$INSTALL_DIR"
 if [ -f "$WORKDIR/wphpanel-installer-linux-amd64" ]; then
-  cp "$WORKDIR/wphpanel-installer-linux-amd64" /tmp/wphpanel-installer
+  cp "$WORKDIR/wphpanel-installer-linux-amd64" "$INSTALL_DIR/wphpanel-installer"
 elif [ -f "$WORKDIR/wphpanel-installer" ]; then
-  cp "$WORKDIR/wphpanel-installer" /tmp/wphpanel-installer
+  cp "$WORKDIR/wphpanel-installer" "$INSTALL_DIR/wphpanel-installer"
 else
-  find "$WORKDIR" -maxdepth 2 -type f -perm -111 -exec cp {} /tmp/wphpanel-installer \;
+  find "$WORKDIR" -maxdepth 2 -type f -perm -111 -exec cp {} "$INSTALL_DIR/wphpanel-installer" \;
 fi
-chmod +x /tmp/wphpanel-installer
+chmod 700 "$INSTALL_DIR/wphpanel-installer"
 rm -rf "$WORKDIR"
 
+INSTALL_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 pkill -f wphpanel-installer 2>/dev/null || true
-nohup /tmp/wphpanel-installer > /tmp/wphpanel-installer.log 2>&1 &
+umask 077
+INSTALL_TOKEN="$INSTALL_TOKEN" nohup "$INSTALL_DIR/wphpanel-installer" > "$INSTALL_DIR/installer.log" 2>&1 &
 sleep 2
 
 echo ""
@@ -246,6 +259,6 @@ echo "════════════════════════�
 echo ""
 echo "  Open your browser:"
 echo ""
-echo "      http://${SERVER_IP}:${INSTALLER_PORT}"
+echo "      http://${SERVER_IP}:${INSTALLER_PORT}/?token=${INSTALL_TOKEN}"
 echo ""
 echo "════════════════════════════════════════════════════════════════"
