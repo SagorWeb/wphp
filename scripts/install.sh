@@ -13,6 +13,7 @@ set -euo pipefail
 REPO_RAW="https://raw.githubusercontent.com/SagorWeb/wphp/main"
 SCRIPT_URL="${REPO_RAW}/scripts/install.sh"
 INSTALLER_PORT="8090"
+RELEASE_PUBKEY_HEX="205e2286927fb703d4ff952df48fef8d49d4d906851c8adeae1f6db34c05ea0e"
 UNIVERSAL_CMD="sudo bash -c 'curl -fsSL ${SCRIPT_URL} | bash'"
 
 fail() {
@@ -191,7 +192,7 @@ echo ""
 export DEBIAN_FRONTEND=noninteractive
 echo ">>> Installing prerequisite packages..."
 apt-get update -qq >/dev/null 2>&1 || true
-apt-get install -y -qq curl tar ca-certificates ufw >/dev/null 2>&1 || true
+apt-get install -y -qq curl tar ca-certificates ufw openssl python3 >/dev/null 2>&1 || true
 
 ufw allow 22/tcp >/dev/null 2>&1 || true
 ufw allow 80/tcp >/dev/null 2>&1 || true
@@ -218,7 +219,66 @@ if [ -z "$EXPECTED" ]; then
   if ! curl -fsSL "$MANIFEST_URL" -o "$WORKDIR/release.json"; then
     fail "Could not fetch release manifest from ${MANIFEST_URL} to verify installer integrity."
   fi
-  EXPECTED=$(sed -n '/installer_linux_amd64/,/sha256/s/.*"sha256": *"\([^"]*\)".*/\1/p' "$WORKDIR/release.json" | head -1 | tr '[:upper:]' '[:lower:]')
+  if ! command -v openssl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+    fail "openssl and python3 are required to verify the release manifest Ed25519 signature."
+  fi
+  EXPECTED=$(python3 - "$WORKDIR/release.json" "$WORKDIR" "$RELEASE_PUBKEY_HEX" <<'PYEOF'
+import base64, json, os, sys
+
+manifest_path, workdir, pub_hex = sys.argv[1], sys.argv[2], sys.argv[3].strip().lower()
+with open(manifest_path, "r", encoding="utf-8") as f:
+    rel = json.load(f)
+
+dl = rel.get("download") or {}
+linux = dl.get("linux_amd64") or {}
+inst = dl.get("installer_linux_amd64") or {}
+
+version = str(rel.get("version") or "").strip()
+build_number = int(rel.get("build_number") or 0)
+linux_sha = str(linux.get("sha256") or "").strip().lower()
+linux_url = str(linux.get("url") or "").strip()
+inst_sha = str(inst.get("sha256") or "").strip().lower()
+min_panel = str(rel.get("min_panel_version") or "").strip()
+sig_raw = str(rel.get("signature") or "").strip()
+
+if not sig_raw:
+    sys.stderr.write("release manifest missing Ed25519 signature\n")
+    sys.exit(1)
+
+try:
+    sig_bytes = bytes.fromhex(sig_raw)
+    if len(sig_bytes) != 64:
+        raise ValueError("bad sig length")
+except ValueError:
+    sig_bytes = base64.b64decode(sig_raw)
+    if len(sig_bytes) != 64:
+        sys.stderr.write("invalid Ed25519 signature encoding\n")
+        sys.exit(1)
+
+pub_bytes = bytes.fromhex(pub_hex)
+if len(pub_bytes) != 32:
+    sys.stderr.write("invalid pinned Ed25519 public key\n")
+    sys.exit(1)
+
+spki = bytes.fromhex("302a300506032b6570032100") + pub_bytes
+pem = "-----BEGIN PUBLIC KEY-----\n" + base64.b64encode(spki).decode("ascii") + "\n-----END PUBLIC KEY-----\n"
+payload = f"wphpanel-release-v1|{version}|{build_number}|{linux_sha}|{linux_url}|{inst_sha}|{min_panel}"
+
+with open(os.path.join(workdir, "pub.pem"), "w", encoding="ascii") as f:
+    f.write(pem)
+with open(os.path.join(workdir, "payload.txt"), "wb") as f:
+    f.write(payload.encode("utf-8"))
+with open(os.path.join(workdir, "sig.bin"), "wb") as f:
+    f.write(sig_bytes)
+
+print(inst_sha)
+PYEOF
+  ) || fail "Could not parse release manifest for Ed25519 signature verification."
+
+  if ! openssl pkeyutl -verify -pubin -inkey "$WORKDIR/pub.pem" -rawin -in "$WORKDIR/payload.txt" -sigfile "$WORKDIR/sig.bin" >/dev/null 2>&1; then
+    fail "Release manifest Ed25519 signature verification FAILED. Aborting installation."
+  fi
+  echo ">>> Release manifest Ed25519 signature verified."
 fi
 EXPECTED=$(printf '%s' "$EXPECTED" | tr '[:upper:]' '[:lower:]')
 if ! printf '%s' "$EXPECTED" | grep -Eq '^[0-9a-f]{64}$'; then
@@ -231,6 +291,14 @@ if [ "$EXPECTED" != "$GOT" ]; then
   echo "  got:      $GOT"
   exit 1
 fi
+
+# Stop any previous installer instance BEFORE replacing $INSTALL_DIR so its
+# SIGTERM cleanup hook finishes cleanly and cannot race against the new binary.
+pkill -f wphpanel-installer 2>/dev/null || true
+for _ in 1 2 3 4 5 6; do
+  pgrep -f wphpanel-installer >/dev/null 2>&1 || break
+  sleep 0.5
+done
 
 tar --no-same-owner -xzf "$WORKDIR/installer.tar.gz" -C "$WORKDIR"
 INSTALL_DIR="/root/.wphpanel-installer"
@@ -246,19 +314,24 @@ fi
 chmod 700 "$INSTALL_DIR/wphpanel-installer"
 rm -rf "$WORKDIR"
 
+# Ensure installer port is open after any previous installer's SIGTERM cleanup.
+ufw allow "${INSTALLER_PORT}/tcp" >/dev/null 2>&1 || true
+
 INSTALL_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-pkill -f wphpanel-installer 2>/dev/null || true
 umask 077
 INSTALL_TOKEN="$INSTALL_TOKEN" nohup "$INSTALL_DIR/wphpanel-installer" > "$INSTALL_DIR/installer.log" 2>&1 &
 sleep 2
 
 echo ""
 echo "════════════════════════════════════════════════════════════════"
-echo "  WPHPanel web installer is running"
+echo "  WPHPanel web installer is running (HTTPS)"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
 echo "  Open your browser:"
+echo "      https://${SERVER_IP}:${INSTALLER_PORT}/"
 echo ""
-echo "      http://${SERVER_IP}:${INSTALLER_PORT}/?token=${INSTALL_TOKEN}"
+echo "  Setup Token (paste into the unlock prompt):"
+echo "      ${INSTALL_TOKEN}"
 echo ""
+echo "  Note: Accept the temporary self-signed certificate warning."
 echo "════════════════════════════════════════════════════════════════"
