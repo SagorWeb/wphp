@@ -318,7 +318,7 @@ rm -rf "$WORKDIR"
 ufw allow "${INSTALLER_PORT}/tcp" >/dev/null 2>&1 || true
 
 INSTALL_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-umask 077
+install -m 600 /dev/null "$INSTALL_DIR/installer.log"
 INSTALL_TOKEN="$INSTALL_TOKEN" nohup "$INSTALL_DIR/wphpanel-installer" > "$INSTALL_DIR/installer.log" 2>&1 &
 sleep 2
 
@@ -327,11 +327,8 @@ echo "════════════════════════�
 echo "  WPHPanel web installer is running (HTTPS)"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
-echo "  Open your browser:"
-echo "      https://${SERVER_IP}:${INSTALLER_PORT}/"
-echo ""
-echo "  Setup Token (paste into the unlock prompt):"
-echo "      ${INSTALL_TOKEN}"
+echo "  Open in your browser:"
+echo "      https://${SERVER_IP}:${INSTALLER_PORT}/?token=${INSTALL_TOKEN}"
 echo ""
 echo "  Note: Accept the temporary self-signed certificate warning."
 echo "════════════════════════════════════════════════════════════════"
