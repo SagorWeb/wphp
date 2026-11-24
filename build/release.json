@@ -1,23 +1,23 @@
 {
   "version": "v1.0.0",
-  "build_number": 10321,
-  "released_at": "2026-11-24T18:36:40Z",
+  "build_number": 10322,
+  "released_at": "2026-11-24T20:29:36Z",
   "min_panel_version": "v1.0.0",
   "changelog": "https://github.com/SagorWeb/wphp/releases/tag/v1.0.0",
   "mandatory": false,
   "download": {
     "linux_amd64": {
       "url": "https://raw.githubusercontent.com/SagorWeb/wphp/main/build/wphpanel-linux-amd64.tar.gz",
-      "sha256": "774376549d59aa0556b6d8c0f2ab11573dd656dac0ecb7670bead4cc13574498"
+      "sha256": "cab6b8c5ff29812c3cf874429758bbb9778632adeca4b2d74a700b0bfc74ec57"
     },
     "installer_linux_amd64": {
       "url": "https://raw.githubusercontent.com/SagorWeb/wphp/main/build/wphpanel-installer-linux-amd64.tar.gz",
-      "sha256": "5726053842550625f818ee982685c1acd5eb29c4b82b782b7ba5cff196a9f0b6"
+      "sha256": "c495afb8040e86f9f9514268f90d6f0c9063062ec987d1efe441ac4586bc37dd"
     }
   },
   "sha256": {
-    "wphpanel-linux-amd64.tar.gz": "774376549d59aa0556b6d8c0f2ab11573dd656dac0ecb7670bead4cc13574498",
-    "wphpanel-installer-linux-amd64.tar.gz": "5726053842550625f818ee982685c1acd5eb29c4b82b782b7ba5cff196a9f0b6"
+    "wphpanel-linux-amd64.tar.gz": "cab6b8c5ff29812c3cf874429758bbb9778632adeca4b2d74a700b0bfc74ec57",
+    "wphpanel-installer-linux-amd64.tar.gz": "c495afb8040e86f9f9514268f90d6f0c9063062ec987d1efe441ac4586bc37dd"
   },
-  "signature": "de6e28b405928bbe7f8cdaaa1cef42776aa8d8a472005c4567429791baa6f32081d43eb6254b8f9340293f3c64bfbc8845adf7a7e74540f8305ccc53cc59d10e"
+  "signature": "2f14dc2cea6bcc6262e04ab51a0cc178025ad0a3751c2636a7d7414ad695e5b44668d2812e7a92259aba4d058ca3c520eca91a70f033ee41fc1e21d381515800"
 }
